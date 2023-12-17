@@ -116,6 +116,7 @@ name = "frontend"
 version = "0.1.0"
 dependencies = [
  "gloo-console 0.3.0",
+ "reqwasm",
  "wasm-bindgen",
  "web-sys",
  "yew",
@@ -813,6 +814,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqwasm"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee625fb8e28ee1dac344e1d135c3b9815ddd5b44b3062cb69fe83168e5225a10"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils 0.1.7",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1039,6 +1060,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ed0d4f68a3015cc185aff4db9506a015f4b96f95303897bfa23f846db54064e"
 dependencies = [
  "cfg-if",
+ "serde",
+ "serde_json",
  "wasm-bindgen-macro",
 ]
 
