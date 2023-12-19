@@ -49,7 +49,7 @@ struct PaymentEntryRequest<'r> {
 #[post("/command", data = "<payment_entry>")]
 async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
     println!("youpi !");
-    println!("data : {}", payment_entry.payment_type);
+    println!("price : {}", payment_entry.price);
     let entry = PaymentEntry {
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),

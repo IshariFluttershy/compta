@@ -1,4 +1,4 @@
-use web_sys::{EventTarget, HtmlSelectElement};
+use web_sys::{EventTarget, HtmlSelectElement, HtmlInputElement};
 use yew::{prelude::*, html::IntoPropValue, platform::spawn_local};
 use wasm_bindgen::JsCast;
 use reqwasm::http::*;
@@ -69,6 +69,18 @@ fn App() -> Html {
         }
     };
 
+    let on_price_input_change = {
+        let price = price.clone();
+
+        Callback::from(move |e: Event| {
+            let target: Option<EventTarget> = e.target();
+            let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
+            if let Some(input) = input {
+                price.set(input.value().parse::<f64>().unwrap());
+            }
+        })
+    };
+
     let on_goods_type_change = {
         let goods_type_handle = goods_type_handle.clone();
 
@@ -95,7 +107,7 @@ fn App() -> Html {
 
     html! {
         <div>
-            <input type="text" id="Name" name="Name" placeholder="Prix"/>
+            <input type="number" id="Price" name="Price" placeholder="Prix" onchange={on_price_input_change}/>
             <select name="model" id="model-select" onchange={on_goods_type_change}>
                 <option value="Nourriture" selected={true}>{"Nourriture"}</option>
                 <option value="Charges">{"Charges"}</option>
