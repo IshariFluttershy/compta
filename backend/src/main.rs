@@ -1,30 +1,32 @@
+use std::fs::{File, self};
+use std::io::{Write, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
 use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
+use serde::{Serialize, Deserialize};
 
 #[macro_use] extern crate rocket;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PaymentEntry {
     price: f64,
     goods_type: String,
     payment_type: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PaymentDatas {
     payments: Vec<PaymentEntry>,
 }
 
 impl PaymentDatas {
-    fn new() -> PaymentDatasPointer {
-        let new_payment_datas = PaymentDatas {
+    fn new() -> PaymentDatas {
+        PaymentDatas {
             payments: Vec::new(),
-        };
-        Arc::new(Mutex::new(new_payment_datas))
+        }
     }
 }
 
@@ -48,8 +50,6 @@ struct PaymentEntryRequest<'r> {
 
 #[post("/command", data = "<payment_entry>")]
 async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
-    println!("youpi !");
-    println!("price : {}", payment_entry.price);
     let entry = PaymentEntry {
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),
@@ -58,8 +58,8 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.push(entry);
 
-
-    println!("payment_datas.payments : {:#?}", payment_datas.payments);
+    let mut file = File::create("save.txt").unwrap();
+    file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
 
     RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
 }
@@ -72,9 +72,30 @@ async fn test() -> RawHtml<String> {
 #[launch]
 fn rocket() -> _ {
     // You must mount the static_files route
+    let data = match try_load_save() {
+        Some(loaded_data) => loaded_data,
+        None => PaymentDatas::new()
+    };
+
+    let data_pointer: Arc<Mutex<PaymentDatas>> = Arc::new(Mutex::new(data));
+
     rocket::build()
-        .manage(PaymentDatas::new())
+        .manage(data_pointer)
         .mount("/", routes![index, static_files, command, test])
+}
+
+fn try_load_save() -> Option<PaymentDatas> {
+    let mut contents = String::new();
+
+    let mut file = match File::open("save.txt") {
+        Ok(file)  => file,
+        Err(e) => return None,
+    };
+    file.read_to_string(&mut contents);
+    match serde_json::from_str(&contents) {
+        Ok(data)  => data,
+        Err(e) => return None,
+    }
 }
 
 // Return the index file as a Rocket NamedFile
