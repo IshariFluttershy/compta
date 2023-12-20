@@ -46,7 +46,10 @@ struct PaymentEntryRequest<'r> {
     r#payment_type: &'r str,
 }
 
-
+#[derive(FromForm, Debug)]
+struct DeleteEntryRequest {
+    r#id: usize,
+}
 
 #[post("/command", data = "<payment_entry>")]
 async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
@@ -57,6 +60,17 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     };
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.push(entry);
+
+    let mut file = File::create("save.txt").unwrap();
+    file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
+
+    RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
+}
+
+#[post("/delete", data = "<delete_entry>")]
+async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
+    let mut payment_datas = payment_datas.lock().await;
+    payment_datas.payments.remove(delete_entry.id);
 
     let mut file = File::create("save.txt").unwrap();
     file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
@@ -81,7 +95,7 @@ fn rocket() -> _ {
 
     rocket::build()
         .manage(data_pointer)
-        .mount("/", routes![index, static_files, command, test])
+        .mount("/", routes![index, static_files, command, test, delete])
 }
 
 fn try_load_save() -> Option<PaymentDatas> {
