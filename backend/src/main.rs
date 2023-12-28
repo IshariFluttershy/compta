@@ -2,6 +2,7 @@ use std::fs::{File, self};
 use std::io::{Write, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
+use common::PaymentEntry;
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
@@ -9,13 +10,6 @@ use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
 use serde::{Serialize, Deserialize};
 
 #[macro_use] extern crate rocket;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PaymentEntry {
-    price: f64,
-    goods_type: String,
-    payment_type: String,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PaymentDatas {
@@ -43,7 +37,7 @@ async fn index() -> Result<NamedFile, NotFound<String>> {
 struct PaymentEntryRequest<'r> {
     r#price: f64,
     r#goods_type: &'r str,
-    r#payment_type: &'r str,
+    r#payment_method: &'r str,
 }
 
 #[derive(FromForm, Debug)]
@@ -56,7 +50,7 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     let entry = PaymentEntry {
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),
-        payment_type: payment_entry.payment_type.to_string(),
+        payment_method: payment_entry.payment_method.to_string(),
     };
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.push(entry);

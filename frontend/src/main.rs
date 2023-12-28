@@ -1,8 +1,13 @@
+use common::PaymentEntry;
 use web_sys::{EventTarget, HtmlSelectElement, HtmlInputElement};
 use yew::{prelude::*, html::IntoPropValue, platform::spawn_local};
 use wasm_bindgen::JsCast;
 use reqwasm::http::*;
 use gloo_console::log;
+
+use crate::components::entryList::EntryList;
+
+mod components;
 
 #[derive(Properties, PartialEq)]
 pub struct Props {
@@ -19,17 +24,23 @@ fn App() -> Html {
     let payment_type_handle: UseStateHandle<String> = use_state(String::default);
     let payment_data_handle: UseStateHandle<String> = use_state(String::default);
 
+    let payment_data_vec: UseStateHandle<Vec<PaymentEntry>> = use_state(Vec::default);
+
     let on_add_payment_click = {
         let price = price.clone();
         let goods_type_handle = goods_type_handle.clone();
         let payment_type_handle = payment_type_handle.clone();
         let payment_data_handle = payment_data_handle.clone();
+        let payment_data_vec = payment_data_vec.clone();
+
 
         move |_| {
             let price = price.clone();
             let goods_type_handle = goods_type_handle.clone();
             let payment_type_handle = payment_type_handle.clone();
             let payment_data_handle = payment_data_handle.clone();
+            let payment_data_vec = payment_data_vec.clone();
+
 
             spawn_local(async move {
                 let resp = Request::post("/command")
@@ -44,8 +55,17 @@ fn App() -> Html {
                     .await
                     .unwrap();
 
-                //log!(resp.text().await.unwrap());
                 payment_data_handle.set(resp.text().await.unwrap());
+                let test = PaymentEntry{
+                    price : *price,
+                    goods_type : (*goods_type_handle).clone(),
+                    payment_method : (*payment_type_handle).clone(),
+                };
+                log!("avant = {}", payment_data_vec.len());
+                let mut cloned: Vec<_> = payment_data_vec.to_vec();
+                cloned.push(test);
+                payment_data_vec.set(cloned);
+                log!("apres = {}", payment_data_vec.len());
             });
         }
     };
@@ -143,6 +163,14 @@ fn App() -> Html {
             </p>
 
             <p>{ (*payment_data_handle).clone() }</p>
+            <p>
+                {"TEXTTTTETETT"}
+            </p>
+            <p>
+                {"hehehe"}
+                    <EntryList entries={(*payment_data_vec).clone()} />
+                {"hehehe222222"}
+            </p>
         </div>
     }
 }
