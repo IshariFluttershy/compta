@@ -1,6 +1,6 @@
-use common::{PaymentEntry, PaymentDatas};
+use common::PaymentDatas;
 use web_sys::{EventTarget, HtmlSelectElement, HtmlInputElement};
-use yew::{prelude::*, html::IntoPropValue, platform::spawn_local};
+use yew::{prelude::*, platform::spawn_local};
 use wasm_bindgen::JsCast;
 use reqwasm::http::*;
 use gloo_console::log;
@@ -19,11 +19,8 @@ pub struct Props {
 fn App() -> Html {
     let price: UseStateHandle<f64> = use_state(|| 0.);
     let id_to_delete: UseStateHandle<usize> = use_state(|| 1);
-
-    let goods_type_handle: UseStateHandle<String> = use_state(String::default);
-    let payment_type_handle: UseStateHandle<String> = use_state(String::default);
-    let payment_data_handle: UseStateHandle<String> = use_state(String::default);
-
+    let goods_type_handle: UseStateHandle<String> = use_state(|| {String::from("Nourriture")});
+    let payment_type_handle: UseStateHandle<String> = use_state(|| {String::from("Carte bleue")});
     let payment_data_vec: UseStateHandle<PaymentDatas> = use_state(PaymentDatas::new);
     let payment_data_vec_clone = payment_data_vec.clone();
 
@@ -50,14 +47,14 @@ fn App() -> Html {
             }
         };
     });
-};
+};    
+use_state(get_data.clone());
+
 
     let on_add_payment_click = {
         let price = price.clone();
         let goods_type_handle = goods_type_handle.clone();
         let payment_type_handle = payment_type_handle.clone();
-        let payment_data_handle = payment_data_handle.clone();
-        let payment_data_vec = payment_data_vec.clone();
         let get_data = get_data.clone();
 
 
@@ -65,8 +62,6 @@ fn App() -> Html {
             let price = price.clone();
             let goods_type_handle = goods_type_handle.clone();
             let payment_type_handle = payment_type_handle.clone();
-            let payment_data_handle = payment_data_handle.clone();
-            let payment_data_vec = payment_data_vec.clone();
             let get_data = get_data.clone();
 
 
@@ -105,15 +100,11 @@ fn App() -> Html {
 
     let on_delete_payment_click = {
         let id_to_delete = id_to_delete.clone();
-        let payment_data_handle = payment_data_handle.clone();
         let get_data = get_data.clone();
-
 
         move |_| {
             let id_to_delete = id_to_delete.clone();
-            let payment_data_handle = payment_data_handle.clone();
             let get_data = get_data.clone();
-
 
             spawn_local(async move {
                 let resp = Request::post("/delete")
@@ -198,8 +189,6 @@ fn App() -> Html {
                 <input type="number" id="IdToDelete" name="IdToDelete" placeholder="Numéro du payement a supprimer" onchange={on_delete_input_change}/>
                 <button onclick={on_delete_payment_click}>{ "Supprime le paiement" }</button>
             </p>
-
-            <p>{ (*payment_data_handle).clone() }</p>
             <p>
                 <EntryList entries={payment_data_vec.payments.clone()} />
             </p>
