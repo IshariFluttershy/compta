@@ -1,31 +1,19 @@
 use std::fs::{File, self};
 use std::io::{Write, Read};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
-use common::PaymentEntry;
+use common::{PaymentEntry, PaymentDatas};
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
 use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
 use serde::{Serialize, Deserialize};
+use rocket::serde::json::Json;
 
 #[macro_use] extern crate rocket;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct PaymentDatas {
-    payments: Vec<PaymentEntry>,
-}
-
-impl PaymentDatas {
-    fn new() -> PaymentDatas {
-        PaymentDatas {
-            payments: Vec::new(),
-        }
-    }
-}
-
 type PaymentDatasPointer = Arc<Mutex<PaymentDatas>>;
-
 
 // Return the index when the url is /
 #[get("/")]
@@ -46,7 +34,7 @@ struct DeleteEntryRequest {
 }
 
 #[post("/command", data = "<payment_entry>")]
-async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
+async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
     let entry = PaymentEntry {
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),
@@ -58,7 +46,7 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     let mut file = File::create("save.txt").unwrap();
     file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
 
-    RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
+    Json(payment_datas.clone())
 }
 
 #[post("/delete", data = "<delete_entry>")]
@@ -77,6 +65,12 @@ async fn test() -> RawHtml<String> {
     RawHtml(format!("connected"))
 }
 
+#[get("/get_data")]
+async fn get_data(payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
+    let payment_datas = payment_datas.lock().await;
+    Json(payment_datas.clone())
+}
+
 #[launch]
 fn rocket() -> _ {
     // You must mount the static_files route
@@ -89,7 +83,7 @@ fn rocket() -> _ {
 
     rocket::build()
         .manage(data_pointer)
-        .mount("/", routes![index, static_files, command, test, delete])
+        .mount("/", routes![index, static_files, command, test, delete, get_data])
 }
 
 fn try_load_save() -> Option<PaymentDatas> {

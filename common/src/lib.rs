@@ -7,3 +7,16 @@ pub struct PaymentEntry {
     pub payment_method: String,
     pub goods_type: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentDatas {
+    pub payments: Vec<PaymentEntry>,
+}
+
+impl PaymentDatas {
+    pub fn new() -> PaymentDatas {
+        PaymentDatas {
+            payments: Vec::new(),
+        }
+    }
+}

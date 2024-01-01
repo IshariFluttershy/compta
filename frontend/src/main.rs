@@ -1,4 +1,4 @@
-use common::PaymentEntry;
+use common::{PaymentEntry, PaymentDatas};
 use web_sys::{EventTarget, HtmlSelectElement, HtmlInputElement};
 use yew::{prelude::*, html::IntoPropValue, platform::spawn_local};
 use wasm_bindgen::JsCast;
@@ -24,7 +24,7 @@ fn App() -> Html {
     let payment_type_handle: UseStateHandle<String> = use_state(String::default);
     let payment_data_handle: UseStateHandle<String> = use_state(String::default);
 
-    let payment_data_vec: UseStateHandle<Vec<PaymentEntry>> = use_state(Vec::default);
+    let payment_data_vec: UseStateHandle<PaymentDatas> = use_state(PaymentDatas::new);
 
     let on_add_payment_click = {
         let price = price.clone();
@@ -43,29 +43,54 @@ fn App() -> Html {
 
 
             spawn_local(async move {
-                let resp = Request::post("/command")
+                match Request::post("/command")
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .body(wasm_bindgen::JsValue::from_str(
-                        &format!("price={}&goods_type={}&payment_type={}",
+                        &format!("price={}&goods_type={}&payment_method={}",
                         *price,
                         *goods_type_handle,
                         *payment_type_handle,
                         )))
                     .send()
                     .await
-                    .unwrap();
-
-                payment_data_handle.set(resp.text().await.unwrap());
-                let test = PaymentEntry{
-                    price : *price,
-                    goods_type : (*goods_type_handle).clone(),
-                    payment_method : (*payment_type_handle).clone(),
-                };
-                log!("avant = {}", payment_data_vec.len());
-                let mut cloned: Vec<_> = payment_data_vec.to_vec();
-                cloned.push(test);
-                payment_data_vec.set(cloned);
-                log!("apres = {}", payment_data_vec.len());
+                    {
+                        Ok(entries1) => match entries1.ok() {
+                            true => {
+                                log!("success");
+                                spawn_local(async move {
+                                    match Request::get("/get_data").send().await {
+                                        Ok(data) => match data.json::<PaymentDatas>().await {
+                                            Ok(data) => {
+                                                log!("success2");
+                                                payment_data_vec.set(data);
+                                                true
+                                            }
+                                            Err(err) => {
+                                                log!("error 1 : ", data.url());
+                                                log!("error 1 : ", data.as_raw());
+                                                log!("error 1 : ", data.status_text());
+                                                log!("error 3 : ", err.to_string());
+                                                false
+                                            }
+                                        },
+                                        Err(err) => {
+                                            log!("error 4 : ", err.to_string());
+                                            false
+                                        }
+                                    };
+                                });
+                            }
+                            false => {
+                                
+                                log!("error 1 : ", entries1.url());
+                                log!("error 1 : ", entries1.as_raw());
+                                log!("error 1 : ", entries1.status_text());
+                            }
+                        },
+                        Err(err) => {
+                            log!("error 2 : ", err.to_string());
+                        }
+                    };
             });
         }
     };
@@ -164,12 +189,7 @@ fn App() -> Html {
 
             <p>{ (*payment_data_handle).clone() }</p>
             <p>
-                {"TEXTTTTETETT"}
-            </p>
-            <p>
-                {"hehehe"}
-                    <EntryList entries={(*payment_data_vec).clone()} />
-                {"hehehe222222"}
+                <EntryList entries={payment_data_vec.payments.clone()} />
             </p>
         </div>
     }
