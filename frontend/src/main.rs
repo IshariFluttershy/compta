@@ -86,6 +86,8 @@ fn App() -> Html {
         let payment_type_handle = payment_type_handle.clone();
         let date_handle = date_handle.clone();
         let get_data = get_data.clone();
+        let get_total = get_total.clone();
+
 
         move |_| {
             let price = price.clone();
@@ -93,6 +95,8 @@ fn App() -> Html {
             let payment_type_handle = payment_type_handle.clone();
             let date_handle = date_handle.clone();
             let get_data = get_data.clone();
+            let get_total = get_total.clone();
+
 
             spawn_local(async move {
                 match Request::post("/command")
@@ -108,6 +112,7 @@ fn App() -> Html {
                         true => {
                             log!("success");
                             get_data();
+                            get_total();
                         }
                         false => {
                             log!("error 1 : ", entries1.url());
@@ -126,10 +131,14 @@ fn App() -> Html {
     let on_delete_payment_click = {
         let id_to_delete = id_to_delete.clone();
         let get_data = get_data.clone();
+        let get_total = get_total.clone();
+
 
         move |_| {
             let id_to_delete = id_to_delete.clone();
             let get_data = get_data.clone();
+            let get_total = get_total.clone();
+
 
             spawn_local(async move {
                 let resp = Request::post("/delete")
@@ -143,6 +152,7 @@ fn App() -> Html {
                     .unwrap();
 
                 get_data();
+                get_total();
             });
         }
     };
