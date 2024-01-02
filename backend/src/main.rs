@@ -47,8 +47,8 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     payment_datas.payments.push(entry);
 
     let mut file = File::create("save.txt").unwrap();
-    file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
-
+    let json = serde_json::to_string(&payment_datas.clone()).unwrap();
+    file.write_all(json.as_bytes());
     Json(payment_datas.clone())
 }
 
@@ -58,7 +58,8 @@ async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<Pa
     payment_datas.payments.remove(delete_entry.id);
 
     let mut file = File::create("save.txt").unwrap();
-    file.write_all(format!("{:#?}", payment_datas.payments).as_bytes());
+    let json = serde_json::to_string(&payment_datas.clone()).unwrap();
+    file.write_all(json.as_bytes());
 
     RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
 }
@@ -114,12 +115,25 @@ fn try_load_save() -> Option<PaymentDatas> {
 
     let mut file = match File::open("save.txt") {
         Ok(file)  => file,
-        Err(e) => return None,
+        Err(e) => {
+            println!("error when opening save file : {}", e);
+            return None
+        },
     };
-    file.read_to_string(&mut contents);
+    match file.read_to_string(&mut contents) {
+        Ok(content)  => (),
+        Err(e) => {
+            println!("error when reading save file : {}", e);
+            return None
+        },
+    };
+
     match serde_json::from_str(&contents) {
         Ok(data)  => data,
-        Err(e) => return None,
+        Err(e) => {
+            println!("error when deserialising : {}", e);
+            None
+        },
     }
 }
 
