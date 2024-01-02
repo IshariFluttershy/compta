@@ -1,11 +1,12 @@
-use common::PaymentDatas;
-use web_sys::{EventTarget, HtmlSelectElement, HtmlInputElement};
-use yew::{prelude::*, platform::spawn_local};
-use wasm_bindgen::JsCast;
-use reqwasm::http::*;
+use chrono::{NaiveDate, NaiveDateTime};
+use common::{PaymentDatas, PaymentTotal};
 use gloo_console::log;
+use reqwasm::http::*;
+use wasm_bindgen::JsCast;
+use web_sys::{console::log, EventTarget, HtmlInputElement, HtmlSelectElement};
+use yew::{platform::spawn_local, prelude::*};
 
-use crate::components::entryList::EntryList;
+use crate::components::{entry_list::EntryList, total::Total};
 
 mod components;
 
@@ -19,81 +20,105 @@ pub struct Props {
 fn App() -> Html {
     let price: UseStateHandle<f64> = use_state(|| 0.);
     let id_to_delete: UseStateHandle<usize> = use_state(|| 1);
-    let goods_type_handle: UseStateHandle<String> = use_state(|| {String::from("Nourriture")});
-    let payment_type_handle: UseStateHandle<String> = use_state(|| {String::from("Carte bleue")});
+    let goods_type_handle: UseStateHandle<String> = use_state(|| String::from("Nourriture"));
+    let payment_type_handle: UseStateHandle<String> = use_state(|| String::from("Carte bleue"));
+    let date_handle: UseStateHandle<i64> = use_state(|| chrono::Local::now().timestamp());
     let payment_data_vec: UseStateHandle<PaymentDatas> = use_state(PaymentDatas::new);
     let payment_data_vec_clone = payment_data_vec.clone();
+    let payment_total: UseStateHandle<PaymentTotal> = use_state(PaymentTotal::new);
+    let payment_total_clone = payment_total.clone();
 
     let get_data = move || {
         spawn_local(async move {
-        match Request::get("/get_data").send().await {
-            Ok(data) => match data.json::<PaymentDatas>().await {
-                Ok(data) => {
-                    log!("success2");
-                    payment_data_vec_clone.set(data);
-                    true
-                }
+            match Request::get("/get_data").send().await {
+                Ok(data) => match data.json::<PaymentDatas>().await {
+                    Ok(data) => {
+                        log!("success2");
+                        payment_data_vec_clone.set(data);
+                        true
+                    }
+                    Err(err) => {
+                        log!("error 1 : ", data.url());
+                        log!("error 1 : ", data.as_raw());
+                        log!("error 1 : ", data.status_text());
+                        log!("error 3 : ", err.to_string());
+                        false
+                    }
+                },
                 Err(err) => {
-                    log!("error 1 : ", data.url());
-                    log!("error 1 : ", data.as_raw());
-                    log!("error 1 : ", data.status_text());
-                    log!("error 3 : ", err.to_string());
+                    log!("error 4 : ", err.to_string());
                     false
                 }
-            },
-            Err(err) => {
-                log!("error 4 : ", err.to_string());
-                false
-            }
-        };
-    });
-};    
-use_state(get_data.clone());
+            };
+        });
+    };
 
+    let get_total = move || {
+        spawn_local(async move {
+            match Request::get("/get_total").send().await {
+                Ok(data) => match data.json::<PaymentTotal>().await {
+                    Ok(data) => {
+                        log!("success2");
+                        payment_total_clone.set(data);
+                        true
+                    }
+                    Err(err) => {
+                        log!("error 1 : ", data.url());
+                        log!("error 1 : ", data.as_raw());
+                        log!("error 1 : ", data.status_text());
+                        log!("error 3 : ", err.to_string());
+                        false
+                    }
+                },
+                Err(err) => {
+                    log!("error 4 : ", err.to_string());
+                    false
+                }
+            };
+        });
+    };
+    use_state(get_data.clone());
+    use_state(get_total.clone());
 
     let on_add_payment_click = {
         let price = price.clone();
         let goods_type_handle = goods_type_handle.clone();
         let payment_type_handle = payment_type_handle.clone();
+        let date_handle = date_handle.clone();
         let get_data = get_data.clone();
-
 
         move |_| {
             let price = price.clone();
             let goods_type_handle = goods_type_handle.clone();
             let payment_type_handle = payment_type_handle.clone();
+            let date_handle = date_handle.clone();
             let get_data = get_data.clone();
-
-
 
             spawn_local(async move {
                 match Request::post("/command")
                     .header("Content-Type", "application/x-www-form-urlencoded")
-                    .body(wasm_bindgen::JsValue::from_str(
-                        &format!("price={}&goods_type={}&payment_method={}",
-                        *price,
-                        *goods_type_handle,
-                        *payment_type_handle,
-                        )))
+                    .body(wasm_bindgen::JsValue::from_str(&format!(
+                        "price={}&goods_type={}&payment_method={}&date={}",
+                        *price, *goods_type_handle, *payment_type_handle, *date_handle,
+                    )))
                     .send()
                     .await
-                    {
-                        Ok(entries1) => match entries1.ok() {
-                            true => {
-                                log!("success");
-                                get_data();
-                            }
-                            false => {
-                                
-                                log!("error 1 : ", entries1.url());
-                                log!("error 1 : ", entries1.as_raw());
-                                log!("error 1 : ", entries1.status_text());
-                            }
-                        },
-                        Err(err) => {
-                            log!("error 2 : ", err.to_string());
+                {
+                    Ok(entries1) => match entries1.ok() {
+                        true => {
+                            log!("success");
+                            get_data();
                         }
-                    };
+                        false => {
+                            log!("error 1 : ", entries1.url());
+                            log!("error 1 : ", entries1.as_raw());
+                            log!("error 1 : ", entries1.status_text());
+                        }
+                    },
+                    Err(err) => {
+                        log!("error 2 : ", err.to_string());
+                    }
+                };
             });
         }
     };
@@ -109,10 +134,10 @@ use_state(get_data.clone());
             spawn_local(async move {
                 let resp = Request::post("/delete")
                     .header("Content-Type", "application/x-www-form-urlencoded")
-                    .body(wasm_bindgen::JsValue::from_str(
-                        &format!("id={}",
-                        *id_to_delete-1
-                        )))
+                    .body(wasm_bindgen::JsValue::from_str(&format!(
+                        "id={}",
+                        *id_to_delete - 1
+                    )))
                     .send()
                     .await
                     .unwrap();
@@ -170,6 +195,29 @@ use_state(get_data.clone());
         })
     };
 
+    let on_date_change = {
+        let date_handle = date_handle.clone();
+        log!("date change");
+
+        Callback::from(move |e: Event| {
+            log!("date change callback");
+
+            let target: Option<EventTarget> = e.target();
+            let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
+            if let Some(input) = input {
+                log!("some input = ", input.value());
+
+                date_handle.set(
+                    NaiveDate::parse_from_str(input.value().as_str(), "%Y-%m-%d")
+                        .unwrap()
+                        .and_hms_opt(9, 10, 11)
+                        .unwrap()
+                        .timestamp(),
+                );
+            }
+        })
+    };
+
     html! {
         <div>
             <p>
@@ -183,6 +231,7 @@ use_state(get_data.clone());
                     <option value="Carte bleue" selected={true}>{"Carte bleue"}</option>
                     <option value="Especes">{"Especes"}</option>
                 </select>
+                <input type="date" id="buy_date" name="buy_date" value={NaiveDateTime::from_timestamp_opt(*date_handle, 0).unwrap().date().to_string()} min="2023-01-01" max="2025-12-31" onchange={on_date_change}/>
                 <button onclick={on_add_payment_click}>{ "Valider" }</button>
             </p>
             <p>
@@ -191,6 +240,7 @@ use_state(get_data.clone());
             </p>
             <p>
                 <EntryList entries={payment_data_vec.payments.clone()} />
+                <Total total={(*payment_total).clone()} />
             </p>
         </div>
     }

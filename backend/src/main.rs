@@ -3,7 +3,8 @@ use std::io::{Write, Read};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
-use common::{PaymentEntry, PaymentDatas};
+use common::{PaymentEntry, PaymentDatas, PaymentTotal};
+use diesel::result;
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
@@ -26,6 +27,7 @@ struct PaymentEntryRequest<'r> {
     r#price: f64,
     r#goods_type: &'r str,
     r#payment_method: &'r str,
+    r#date: i64,
 }
 
 #[derive(FromForm, Debug)]
@@ -39,6 +41,7 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),
         payment_method: payment_entry.payment_method.to_string(),
+        date: payment_entry.date,
     };
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.push(entry);
@@ -60,15 +63,35 @@ async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<Pa
     RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
 }
 
-#[get("/test")]
-async fn test() -> RawHtml<String> {
-    RawHtml(format!("connected"))
-}
-
 #[get("/get_data")]
 async fn get_data(payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
     let payment_datas = payment_datas.lock().await;
     Json(payment_datas.clone())
+}
+
+#[get("/get_total")]
+async fn get_total(payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentTotal> {
+    let payment_datas = payment_datas.lock().await;
+
+    let entries = payment_datas.payments.clone();
+    let mut result = PaymentTotal::new();
+    result.total = entries.iter().map(|entry| entry.price).sum();
+
+    result.cb = entries.iter().filter(|entry| entry.payment_method == "Carte bleue").map(|entry| entry.price).sum();
+    result.cash = entries.iter().filter(|entry| entry.payment_method == "Especes").map(|entry| entry.price).sum();
+
+    result.food = entries.iter().filter(|entry| entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
+    result.charges = entries.iter().filter(|entry| entry.goods_type == "Charges").map(|entry| entry.price).sum();
+    result.miscellaneous = entries.iter().filter(|entry| entry.goods_type == "Autres").map(|entry| entry.price).sum();
+
+    result.cb_charges = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Charges").map(|entry| entry.price).sum();
+    result.cb_food = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
+    result.cb_miscellaneous = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Autres").map(|entry| entry.price).sum();
+    result.cash_charges = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Charges").map(|entry| entry.price).sum();
+    result.cash_food = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
+    result.cash_miscellaneous = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Autres").map(|entry| entry.price).sum();
+
+    Json(result)
 }
 
 #[launch]
@@ -83,7 +106,7 @@ fn rocket() -> _ {
 
     rocket::build()
         .manage(data_pointer)
-        .mount("/", routes![index, static_files, command, test, delete, get_data])
+        .mount("/", routes![index, static_files, command, delete, get_data, get_total])
 }
 
 fn try_load_save() -> Option<PaymentDatas> {
