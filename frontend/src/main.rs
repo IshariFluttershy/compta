@@ -20,17 +20,29 @@ pub struct Props {
 fn App() -> Html {
     let price: UseStateHandle<f64> = use_state(|| 0.);
     let id_to_delete: UseStateHandle<usize> = use_state(|| 1);
+    let month: UseStateHandle<u32> = use_state(|| 0);
+    let year: UseStateHandle<u32> = use_state(|| 0);
     let goods_type_handle: UseStateHandle<String> = use_state(|| String::from("Nourriture"));
     let payment_type_handle: UseStateHandle<String> = use_state(|| String::from("Carte bleue"));
     let date_handle: UseStateHandle<i64> = use_state(|| chrono::Local::now().timestamp());
     let payment_data_vec: UseStateHandle<PaymentDatas> = use_state(PaymentDatas::new);
-    let payment_data_vec_clone = payment_data_vec.clone();
     let payment_total: UseStateHandle<PaymentTotal> = use_state(PaymentTotal::new);
+
+    let payment_data_vec_clone = payment_data_vec.clone();
     let payment_total_clone = payment_total.clone();
+    let month_clone1 = month.clone();
+    let year_clone1 = year.clone();
+    let month_clone2 = month.clone();
+    let year_clone2 = year.clone();
 
     let get_data = move || {
         spawn_local(async move {
-            match Request::get("/get_data").send().await {
+            match Request::get(
+                &format!(
+                    "/get_data?month={}&year={}",
+                    *month_clone1, *year_clone1,
+                ))
+            .send().await {
                 Ok(data) => match data.json::<PaymentDatas>().await {
                     Ok(data) => {
                         log!("success2");
@@ -55,7 +67,11 @@ fn App() -> Html {
 
     let get_total = move || {
         spawn_local(async move {
-            match Request::get("/get_total").send().await {
+            match Request::get(                &format!(
+                "/get_total?month={}&year={}",
+                *month_clone2, *year_clone2,
+            ))
+            .send().await {
                 Ok(data) => match data.json::<PaymentTotal>().await {
                     Ok(data) => {
                         log!("success2");
@@ -181,6 +197,30 @@ fn App() -> Html {
         })
     };
 
+    let on_month_input_change = {
+        let month: UseStateHandle<u32> = month.clone();
+
+        Callback::from(move |e: Event| {
+            let target: Option<EventTarget> = e.target();
+            let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
+            if let Some(input) = input {
+                month.set(input.value().parse::<u32>().unwrap());
+            }
+        })
+    };
+
+    let on_year_input_change = {
+        let year = year.clone();
+
+        Callback::from(move |e: Event| {
+            let target: Option<EventTarget> = e.target();
+            let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
+            if let Some(input) = input {
+                year.set(input.value().parse::<u32>().unwrap());
+            }
+        })
+    };
+
     let on_goods_type_change = {
         let goods_type_handle = goods_type_handle.clone();
 
@@ -247,6 +287,10 @@ fn App() -> Html {
             <p>
                 <input type="number" id="IdToDelete" name="IdToDelete" placeholder="Numéro du payement a supprimer" onchange={on_delete_input_change}/>
                 <button onclick={on_delete_payment_click}>{ "Supprime le paiement" }</button>
+            </p>
+            <p>
+                <input type="number" id="Month" name="Month" placeholder="1" onchange={on_month_input_change}/>
+                <input type="number" id="Year" name="Year" placeholder="2023" onchange={on_year_input_change}/>
             </p>
             <p>
                 <EntryList entries={payment_data_vec.payments.clone()} />

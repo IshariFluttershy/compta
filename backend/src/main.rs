@@ -11,6 +11,8 @@ use rocket::tokio::sync::Mutex;
 use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
 use serde::{Serialize, Deserialize};
 use rocket::serde::json::Json;
+use chrono::{DateTime, Datelike};
+use chrono::Utc;
 
 #[macro_use] extern crate rocket;
 
@@ -64,18 +66,18 @@ async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<Pa
     RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
 }
 
-#[get("/get_data")]
-async fn get_data(payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
+#[get("/get_data?<year>&<month>")]
+async fn get_data(month: u32, year: u32, payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
     let payment_datas = payment_datas.lock().await;
-    Json(payment_datas.clone())
+    Json(get_date_entries(&payment_datas, month, year))
 }
 
-#[get("/get_total")]
-async fn get_total(payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentTotal> {
+#[get("/get_total?<year>&<month>")]
+async fn get_total(month: u32, year: u32, payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentTotal> {
     let payment_datas = payment_datas.lock().await;
-
-    let entries = payment_datas.payments.clone();
+    let entries = get_date_entries(&payment_datas, month, year).payments;
     let mut result = PaymentTotal::new();
+
     result.total = entries.iter().map(|entry| entry.price).sum();
 
     result.cb = entries.iter().filter(|entry| entry.payment_method == "Carte bleue").map(|entry| entry.price).sum();
@@ -154,3 +156,27 @@ async fn static_files(path: PathBuf) -> Result<NamedFile, NotFound<String>> {
     }
 }
 
+fn get_date_entries(data: &PaymentDatas, month: u32, year: u32) -> PaymentDatas
+{
+    if (month == 0 && year == 0) {
+        data.clone()
+    } else if (month == 0) {
+        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
+            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
+            entry_date.month() == month
+        }).collect()
+        }
+    } else if (year == 0) {
+        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
+            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
+            entry_date.year_ce() == (true, year)
+        }).collect()
+        }
+    } else {
+        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
+            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
+            entry_date.month() == month && entry_date.year_ce() == (true, year)
+        }).collect()
+        }
+    }
+}
