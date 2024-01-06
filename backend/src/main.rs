@@ -160,13 +160,13 @@ fn get_date_entries(data: &PaymentDatas, month: u32, year: u32) -> PaymentDatas
 {
     if (month == 0 && year == 0) {
         data.clone()
-    } else if (month == 0) {
+    } else if (year == 0) {
         PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
             let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
             entry_date.month() == month
         }).collect()
         }
-    } else if (year == 0) {
+    } else if (month == 0) {
         PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
             let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
             entry_date.year_ce() == (true, year)
