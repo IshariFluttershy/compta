@@ -283,14 +283,19 @@ fn App() -> Html {
                 </select>
                 <input type="date" id="buy_date" name="buy_date" value={NaiveDateTime::from_timestamp_opt(*date_handle, 0).unwrap().date().to_string()} min="2023-01-01" max="2025-12-31" onchange={on_date_change}/>
                 <button onclick={on_add_payment_click}>{ "Valider" }</button>
-            </p>
-            <p>
-                <input type="number" id="IdToDelete" name="IdToDelete" placeholder="Numéro du payement a supprimer" onchange={on_delete_input_change}/>
+                {"________________________________________"}
+                <input type="number" id="IdToDelete" name="IdToDelete" placeholder="ID a supprimer" onchange={on_delete_input_change}/>
                 <button onclick={on_delete_payment_click}>{ "Supprime le paiement" }</button>
             </p>
             <p>
-                <input type="number" id="Month" name="Month" placeholder="1" onchange={on_month_input_change}/>
-                <input type="number" id="Year" name="Year" placeholder="2023" onchange={on_year_input_change}/>
+            <p>
+                {"Mois (de 1 a 12), 0 pour ne pas filtrer : "}
+                <input type="number" id="Month" name="Month" placeholder="1" min="0" max="12" onchange={on_month_input_change}/>
+                </p>
+                <p>
+                {"Année, 0 pour ne pas filtrer : "}
+                <input type="number" id="Year" name="Year" placeholder="2023" min="2023" max="2030" onchange={on_year_input_change}/>
+                </p>
             </p>
             <p>
                 <EntryList entries={payment_data_vec.payments.clone()} />
