@@ -1,5 +1,33 @@
 use serde::{Deserialize, Serialize};
 
+pub enum PaymentMethod {
+    CarteBleue,
+    Especes,
+}
+impl PaymentMethod {
+    fn as_str(&self) -> &'static str {
+        match self {
+            PaymentMethod::CarteBleue => "Carte bleue",
+            PaymentMethod::Especes => "Espèces"
+        }
+    }
+}
+
+pub enum GoodType {
+    Nourriture,
+    Charges,
+    Autres,
+}
+impl GoodType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            GoodType::Nourriture => "Nourriture",
+            GoodType::Charges => "Charges",
+            GoodType::Autres => "Autres",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct PaymentEntry {
     pub price: f64,

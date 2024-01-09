@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::{Write, Read};
 use std::path::PathBuf;
-use std::result;
 use std::sync::Arc;
 use common::{PaymentEntry, PaymentDatas, PaymentTotal};
 use rocket::State;
@@ -26,15 +25,15 @@ async fn index() -> Result<NamedFile, NotFound<String>> {
 
 #[derive(FromForm, Debug)]
 struct PaymentEntryRequest<'r> {
-    r#price: f64,
-    r#goods_type: &'r str,
-    r#payment_method: &'r str,
-    r#date: i64,
+    price: f64,
+    goods_type: &'r str,
+    payment_method: &'r str,
+    date: i64,
 }
 
 #[derive(FromForm, Debug)]
 struct DeleteEntryRequest {
-    r#id: usize,
+    id: usize,
 }
 
 #[post("/command", data = "<payment_entry>")]
@@ -90,6 +89,9 @@ fn save_emergency_datas(payment_datas: &PaymentDatas) {
     let mut file: File = File::create(datetime_format).unwrap();
     let json: String = serde_json::to_string(&payment_datas.clone()).unwrap();
     file.write_all(json.as_bytes()).unwrap();
+    // C'est mieux de mettre le programme dans un état qui permet de renvoyer a l'utilisateur que c'est la merde
+    // Genre faudrait définir un enum qui dit si on est dans un état normal de fonctionnement ou non
+    // Et si on est pas dans un état normal, faire un retour a l'utilisateur
     panic!("Error when saving datas. Reach the maintainer of the program to fix the problem and get emergency saved datas");
 }
 
@@ -138,8 +140,11 @@ fn rocket() -> _ {
     // You must mount the static_files route
     env_logger::init();
     let data = match try_load_save() {
-        Some(loaded_data) => loaded_data,
-        None => PaymentDatas::new()
+        Ok(loaded_data) => loaded_data,
+        Err(e) => {
+            log::error!("Error when loading save data : {}", e);
+            panic!();
+        }
     };
 
     let data_pointer: Arc<Mutex<PaymentDatas>> = Arc::new(Mutex::new(data));
@@ -149,29 +154,29 @@ fn rocket() -> _ {
         .mount("/", routes![index, static_files, command, delete, get_data, get_total])
 }
 
-fn try_load_save() -> Option<PaymentDatas> {
+fn try_load_save() -> Result<PaymentDatas, Box<dyn std::error::Error>> {
     let mut contents = String::new();
 
     let mut file = match File::open(SAVE_FILE_PATH) {
         Ok(file)  => file,
         Err(e) => {
             println!("error when opening save file : {}", e);
-            return None
+            return Err(Box::new(e))
         },
     };
     match file.read_to_string(&mut contents) {
-        Ok(content)  => (),
+        Ok(_)  => (),
         Err(e) => {
             println!("error when reading save file : {}", e);
-            return None
+            return Err(Box::new(e))
         },
     };
 
     match serde_json::from_str(&contents) {
-        Ok(data)  => data,
+        Ok(data)  => Ok(data),
         Err(e) => {
             println!("error when deserialising : {}", e);
-            None
+            Err(Box::new(e))
         },
     }
 }
@@ -195,25 +200,10 @@ async fn static_files(path: PathBuf) -> Result<NamedFile, NotFound<String>> {
 
 fn get_date_entries(data: &PaymentDatas, month: u32, year: u32) -> PaymentDatas
 {
-    if (month == 0 && year == 0) {
-        data.clone()
-    } else if (year == 0) {
-        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
-            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
-            entry_date.month() == month
-        }).collect()
-        }
-    } else if (month == 0) {
-        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
-            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
-            entry_date.year_ce() == (true, year)
-        }).collect()
-        }
-    } else {
-        PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
-            let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
-            entry_date.month() == month && entry_date.year_ce() == (true, year)
-        }).collect()
-        }
+    PaymentDatas { payments: data.payments.clone().into_iter().filter(|entry| {
+        let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
+        (month == 0 || entry_date.month() == month) &&
+            (year == 0 || entry_date.year_ce() == (true, year))
+    }).collect()
     }
 }
