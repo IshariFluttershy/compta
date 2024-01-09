@@ -1,22 +1,22 @@
-use std::fs::{File, self};
+use std::fs::File;
 use std::io::{Write, Read};
-use std::ops::Deref;
 use std::path::PathBuf;
+use std::result;
 use std::sync::Arc;
 use common::{PaymentEntry, PaymentDatas, PaymentTotal};
-use diesel::result;
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
 use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
-use serde::{Serialize, Deserialize};
 use rocket::serde::json::Json;
-use chrono::{DateTime, Datelike};
+use chrono::{DateTime, Datelike, Local, SecondsFormat};
 use chrono::Utc;
 
 #[macro_use] extern crate rocket;
 
 type PaymentDatasPointer = Arc<Mutex<PaymentDatas>>;
+
+const SAVE_FILE_PATH: &str = "save.json";
 
 // Return the index when the url is /
 #[get("/")]
@@ -48,10 +48,49 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.push(entry);
 
-    let mut file = File::create("save.txt").unwrap();
-    let json = serde_json::to_string(&payment_datas.clone()).unwrap();
-    file.write_all(json.as_bytes());
+    save_datas(&payment_datas);
     Json(payment_datas.clone())
+}
+
+fn save_datas(payment_datas: &PaymentDatas) {
+    if try_save_datas(payment_datas).is_err() {
+        save_emergency_datas(payment_datas);
+    };
+}
+
+fn try_save_datas(payment_datas: &PaymentDatas) -> Result<(), ()>
+{
+    let mut file = match File::create(SAVE_FILE_PATH) {
+        Ok(file) => file,
+        Err(e) => {
+            log::error!("Error when creating save file : {}", e);
+            return Err(());
+        }
+    };
+
+    let json = match serde_json::to_string(&payment_datas.clone()) {
+        Ok(json) => json,
+        Err(e) => {
+            log::error!("Error when serializing data : {}", e);
+            return Err(());
+        }
+    };
+
+    match file.write_all(json.as_bytes()) {
+        Err(e) => {
+            log::error!("Error when writing save data on file : {}", e);
+            Err(())
+        }
+        Ok(_) => Ok(())
+    }
+}
+
+fn save_emergency_datas(payment_datas: &PaymentDatas) {
+    let datetime_format: String = Local::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let mut file: File = File::create(datetime_format).unwrap();
+    let json: String = serde_json::to_string(&payment_datas.clone()).unwrap();
+    file.write_all(json.as_bytes()).unwrap();
+    panic!("Error when saving datas. Reach the maintainer of the program to fix the problem and get emergency saved datas");
 }
 
 #[post("/delete", data = "<delete_entry>")]
@@ -59,10 +98,7 @@ async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<Pa
     let mut payment_datas = payment_datas.lock().await;
     payment_datas.payments.remove(delete_entry.id);
 
-    let mut file = File::create("save.txt").unwrap();
-    let json = serde_json::to_string(&payment_datas.clone()).unwrap();
-    file.write_all(json.as_bytes());
-
+    save_datas(&payment_datas);
     RawHtml(format!("payment_datas.payments : {:#?}", payment_datas.payments))
 }
 
@@ -100,6 +136,7 @@ async fn get_total(month: u32, year: u32, payment_datas: &State<PaymentDatasPoin
 #[launch]
 fn rocket() -> _ {
     // You must mount the static_files route
+    env_logger::init();
     let data = match try_load_save() {
         Some(loaded_data) => loaded_data,
         None => PaymentDatas::new()
@@ -115,7 +152,7 @@ fn rocket() -> _ {
 fn try_load_save() -> Option<PaymentDatas> {
     let mut contents = String::new();
 
-    let mut file = match File::open("save.txt") {
+    let mut file = match File::open(SAVE_FILE_PATH) {
         Ok(file)  => file,
         Err(e) => {
             println!("error when opening save file : {}", e);
