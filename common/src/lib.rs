@@ -5,7 +5,7 @@ pub enum PaymentMethod {
     Especes,
 }
 impl PaymentMethod {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             PaymentMethod::CarteBleue => "Carte bleue",
             PaymentMethod::Especes => "Espèces"
@@ -19,7 +19,7 @@ pub enum GoodType {
     Autres,
 }
 impl GoodType {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             GoodType::Nourriture => "Nourriture",
             GoodType::Charges => "Charges",

@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, NaiveDateTime};
-use common::{PaymentDatas, PaymentTotal};
+use common::{PaymentDatas, PaymentTotal, GoodType, PaymentMethod};
 use gloo_console::log;
 use reqwasm::http::*;
 use wasm_bindgen::JsCast;
@@ -22,8 +22,8 @@ fn App() -> Html {
     let id_to_delete: UseStateHandle<usize> = use_state(|| 1);
     let month: UseStateHandle<u32> = use_state(|| 0);
     let year: UseStateHandle<u32> = use_state(|| 0);
-    let goods_type_handle: UseStateHandle<String> = use_state(|| String::from("Nourriture"));
-    let payment_type_handle: UseStateHandle<String> = use_state(|| String::from("Carte bleue"));
+    let goods_type_handle: UseStateHandle<String> = use_state(|| String::from(GoodType::Nourriture.as_str()));
+    let payment_type_handle: UseStateHandle<String> = use_state(|| String::from(PaymentMethod::CarteBleue.as_str()));
     let date_handle: UseStateHandle<i64> = use_state(|| chrono::Local::now().timestamp());
     let payment_data_vec: UseStateHandle<PaymentDatas> = use_state(PaymentDatas::new);
     let payment_total: UseStateHandle<PaymentTotal> = use_state(PaymentTotal::new);
@@ -273,13 +273,13 @@ fn App() -> Html {
             <p>
                 <input type="number" id="Price" name="Price" placeholder="Prix" onchange={on_price_input_change}/>
                 <select name="model" id="model-select" onchange={on_goods_type_change}>
-                    <option value="Nourriture" selected={true}>{"Nourriture"}</option>
-                    <option value="Charges">{"Charges"}</option>
-                    <option value="Autres">{"Autres"}</option>
+                    <option value={GoodType::Nourriture.as_str()} selected={true}>{GoodType::Nourriture.as_str()}</option>
+                    <option value={GoodType::Charges.as_str()}>{GoodType::Charges.as_str()}</option>
+                    <option value={GoodType::Autres.as_str()}>{GoodType::Autres.as_str()}</option>
                 </select>
                 <select name="model" id="model-select" onchange={on_payment_type_change}>
-                    <option value="Carte bleue" selected={true}>{"Carte bleue"}</option>
-                    <option value="Especes">{"Especes"}</option>
+                    <option value={PaymentMethod::CarteBleue.as_str()} selected={true}>{PaymentMethod::CarteBleue.as_str()}</option>
+                    <option value={PaymentMethod::Especes.as_str()}>{PaymentMethod::Especes.as_str()}</option>
                 </select>
                 <input type="date" id="buy_date" name="buy_date" value={NaiveDateTime::from_timestamp_opt(*date_handle, 0).unwrap().date().to_string()} min="2023-01-01" max="2025-12-31" onchange={on_date_change}/>
                 <button onclick={on_add_payment_click}>{ "Valider" }</button>

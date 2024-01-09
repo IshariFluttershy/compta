@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{Write, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
-use common::{PaymentEntry, PaymentDatas, PaymentTotal};
+use common::{PaymentEntry, PaymentDatas, PaymentTotal, PaymentMethod, GoodType};
 use rocket::State;
 use rocket::form::Form;
 use rocket::tokio::sync::Mutex;
@@ -118,19 +118,19 @@ async fn get_total(month: u32, year: u32, payment_datas: &State<PaymentDatasPoin
 
     result.total = entries.iter().map(|entry| entry.price).sum();
 
-    result.cb = entries.iter().filter(|entry| entry.payment_method == "Carte bleue").map(|entry| entry.price).sum();
-    result.cash = entries.iter().filter(|entry| entry.payment_method == "Especes").map(|entry| entry.price).sum();
+    result.cb = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str()).map(|entry| entry.price).sum();
+    result.cash = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str()).map(|entry| entry.price).sum();
 
-    result.food = entries.iter().filter(|entry| entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
-    result.charges = entries.iter().filter(|entry| entry.goods_type == "Charges").map(|entry| entry.price).sum();
-    result.miscellaneous = entries.iter().filter(|entry| entry.goods_type == "Autres").map(|entry| entry.price).sum();
+    result.food = entries.iter().filter(|entry| entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
+    result.charges = entries.iter().filter(|entry| entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
+    result.miscellaneous = entries.iter().filter(|entry| entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
 
-    result.cb_charges = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Charges").map(|entry| entry.price).sum();
-    result.cb_food = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
-    result.cb_miscellaneous = entries.iter().filter(|entry| entry.payment_method == "Carte bleue" && entry.goods_type == "Autres").map(|entry| entry.price).sum();
-    result.cash_charges = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Charges").map(|entry| entry.price).sum();
-    result.cash_food = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Nourriture").map(|entry| entry.price).sum();
-    result.cash_miscellaneous = entries.iter().filter(|entry| entry.payment_method == "Especes" && entry.goods_type == "Autres").map(|entry| entry.price).sum();
+    result.cb_charges = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
+    result.cb_food = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
+    result.cb_miscellaneous = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
+    result.cash_charges = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
+    result.cash_food = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
+    result.cash_miscellaneous = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
 
     Json(result)
 }

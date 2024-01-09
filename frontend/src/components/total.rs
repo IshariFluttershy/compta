@@ -1,4 +1,4 @@
-use common::PaymentTotal;
+use common::{PaymentTotal, PaymentMethod, GoodType};
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
@@ -14,24 +14,24 @@ pub fn total(TotalProps { total }: &TotalProps) -> Html {
             <caption>{"Totaux"}</caption>
             <tr>
                 <td></td>
-                <th scope="col">{"Carte bleue"}</th>
-                <th scope="col">{"Especes"}</th>
+                <th scope="col">{PaymentMethod::CarteBleue.as_str()}</th>
+                <th scope="col">{PaymentMethod::Especes.as_str()}</th>
                 <th scope="col">{"Total"}</th>
             </tr>
             <tr>
-                <th scope="row">{"Nourriture"}</th>
+                <th scope="row">{GoodType::Nourriture.as_str()}</th>
                 <td>{total.cb_food}</td>
                 <td>{total.cash_food}</td>
                 <td>{total.food}</td>
             </tr>
             <tr>
-                <th scope="row">{"Charges"}</th>
+                <th scope="row">{GoodType::Charges.as_str()}</th>
                 <td>{total.cb_charges}</td>
                 <td>{total.cash_charges}</td>
                 <td>{total.charges}</td>
             </tr>
             <tr>
-                <th scope="row">{"Autres"}</th>
+                <th scope="row">{GoodType::Autres.as_str()}</th>
                 <td>{total.cb_miscellaneous}</td>
                 <td>{total.cash_miscellaneous}</td>
                 <td>{total.miscellaneous}</td>
