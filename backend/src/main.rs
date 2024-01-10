@@ -1,19 +1,20 @@
 use std::fs::File;
 use std::io::{Write, Read};
+use std::ops::Add;
 use std::path::PathBuf;
 use std::sync::Arc;
 use common::{PaymentEntry, PaymentDatas, PaymentTotal, PaymentMethod, GoodType};
 use rocket::State;
 use rocket::form::Form;
-use rocket::tokio::sync::Mutex;
+use rocket::tokio::sync::{Mutex, RwLock};
 use rocket::{fs::NamedFile, response::{status::NotFound, content::RawHtml}};
 use rocket::serde::json::Json;
-use chrono::{DateTime, Datelike, Local, SecondsFormat};
+use chrono::{DateTime, Datelike, Local};
 use chrono::Utc;
 
 #[macro_use] extern crate rocket;
 
-type PaymentDatasPointer = Arc<Mutex<PaymentDatas>>;
+type PaymentDatasPointer = Arc<RwLock<PaymentDatas>>;
 
 const SAVE_FILE_PATH: &str = "save.json";
 
@@ -44,7 +45,7 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
         payment_method: payment_entry.payment_method.to_string(),
         date: payment_entry.date,
     };
-    let mut payment_datas = payment_datas.lock().await;
+    let mut payment_datas = payment_datas.write().await;
     payment_datas.payments.push(entry);
 
     save_datas(&payment_datas);
@@ -67,7 +68,7 @@ fn try_save_datas(payment_datas: &PaymentDatas) -> Result<(), ()>
         }
     };
 
-    let json = match serde_json::to_string(&payment_datas.clone()) {
+    let json = match serde_json::to_string(&payment_datas) {
         Ok(json) => json,
         Err(e) => {
             log::error!("Error when serializing data : {}", e);
@@ -85,9 +86,9 @@ fn try_save_datas(payment_datas: &PaymentDatas) -> Result<(), ()>
 }
 
 fn save_emergency_datas(payment_datas: &PaymentDatas) {
-    let datetime_format: String = Local::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let datetime_format: String = Local::now().format("%Y%m%y_%H%M").to_string().add(".log");
     let mut file: File = File::create(datetime_format).unwrap();
-    let json: String = serde_json::to_string(&payment_datas.clone()).unwrap();
+    let json: String = serde_json::to_string(&payment_datas).unwrap();
     file.write_all(json.as_bytes()).unwrap();
     // C'est mieux de mettre le programme dans un état qui permet de renvoyer a l'utilisateur que c'est la merde
     // Genre faudrait définir un enum qui dit si on est dans un état normal de fonctionnement ou non
@@ -97,7 +98,7 @@ fn save_emergency_datas(payment_datas: &PaymentDatas) {
 
 #[post("/delete", data = "<delete_entry>")]
 async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<PaymentDatasPointer>) -> RawHtml<String> {
-    let mut payment_datas = payment_datas.lock().await;
+    let mut payment_datas = payment_datas.write().await;
     payment_datas.payments.remove(delete_entry.id);
 
     save_datas(&payment_datas);
@@ -106,31 +107,56 @@ async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<Pa
 
 #[get("/get_data?<year>&<month>")]
 async fn get_data(month: u32, year: u32, payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentDatas> {
-    let payment_datas = payment_datas.lock().await;
+    let payment_datas = payment_datas.read().await;
     Json(get_date_entries(&payment_datas, month, year))
+}
+
+fn calculate_total(entries: &[&PaymentEntry]) -> f64 {
+    entries.iter().map(|entry| entry.price).sum()
+}
+
+fn calculate_total_for_payment_method(entries: &[&PaymentEntry], method: PaymentMethod) -> f64 {
+    entries.iter()
+           .filter(|entry| entry.payment_method == method.as_str())
+           .map(|entry| entry.price)
+           .sum()
+}
+
+fn calculate_total_for_good_type(entries: &[&PaymentEntry], good_type: GoodType) -> f64 {
+    entries.iter()
+           .filter(|entry| entry.goods_type == good_type.as_str())
+           .map(|entry| entry.price)
+           .sum()
+}
+
+fn calculate_combined_total(entries: &[&PaymentEntry], method: PaymentMethod, good_type: GoodType) -> f64 {
+    entries.iter()
+           .filter(|entry| entry.payment_method == method.as_str() && entry.goods_type == good_type.as_str())
+           .map(|entry| entry.price)
+           .sum()
 }
 
 #[get("/get_total?<year>&<month>")]
 async fn get_total(month: u32, year: u32, payment_datas: &State<PaymentDatasPointer>) -> Json<PaymentTotal> {
-    let payment_datas = payment_datas.lock().await;
-    let entries = get_date_entries(&payment_datas, month, year).payments;
+    let payment_datas = payment_datas.read().await;
+    let entries = get_date_entries_readonly(&payment_datas, month, year);
     let mut result = PaymentTotal::new();
 
-    result.total = entries.iter().map(|entry| entry.price).sum();
+    result.total = calculate_total(&entries);
 
-    result.cb = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str()).map(|entry| entry.price).sum();
-    result.cash = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str()).map(|entry| entry.price).sum();
+    result.cb = calculate_total_for_payment_method(&entries, PaymentMethod::CarteBleue);
+    result.cash = calculate_total_for_payment_method(&entries, PaymentMethod::Especes);
 
-    result.food = entries.iter().filter(|entry| entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
-    result.charges = entries.iter().filter(|entry| entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
-    result.miscellaneous = entries.iter().filter(|entry| entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
+    result.food = calculate_total_for_good_type(&entries, GoodType::Nourriture);
+    result.charges = calculate_total_for_good_type(&entries, GoodType::Charges);
+    result.miscellaneous = calculate_total_for_good_type(&entries, GoodType::Autres);
 
-    result.cb_charges = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
-    result.cb_food = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
-    result.cb_miscellaneous = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::CarteBleue.as_str() && entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
-    result.cash_charges = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Charges.as_str()).map(|entry| entry.price).sum();
-    result.cash_food = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Nourriture.as_str()).map(|entry| entry.price).sum();
-    result.cash_miscellaneous = entries.iter().filter(|entry| entry.payment_method == PaymentMethod::Especes.as_str() && entry.goods_type == GoodType::Autres.as_str()).map(|entry| entry.price).sum();
+    result.cb_charges = calculate_combined_total(&entries, PaymentMethod::CarteBleue, GoodType::Charges);
+    result.cb_food = calculate_combined_total(&entries, PaymentMethod::CarteBleue, GoodType::Nourriture);
+    result.cb_miscellaneous = calculate_combined_total(&entries, PaymentMethod::CarteBleue, GoodType::Autres);
+    result.cash_charges = calculate_combined_total(&entries, PaymentMethod::Especes, GoodType::Charges);
+    result.cash_food = calculate_combined_total(&entries, PaymentMethod::Especes, GoodType::Nourriture);
+    result.cash_miscellaneous = calculate_combined_total(&entries, PaymentMethod::Especes, GoodType::Autres);
 
     Json(result)
 }
@@ -143,6 +169,7 @@ fn rocket() -> _ {
         Ok(loaded_data) => loaded_data,
         Err(e) => {
             log::error!("Error when loading save data : {}", e);
+            // faire un handle d'erreur correct et rediriger vers une page d'erreur qui dit que ya eu un souci
             panic!();
         }
     };
@@ -160,14 +187,14 @@ fn try_load_save() -> Result<PaymentDatas, Box<dyn std::error::Error>> {
     let mut file = match File::open(SAVE_FILE_PATH) {
         Ok(file)  => file,
         Err(e) => {
-            println!("error when opening save file : {}", e);
+            log::error!("error when opening save file : {}", e);
             return Err(Box::new(e))
         },
     };
     match file.read_to_string(&mut contents) {
         Ok(_)  => (),
         Err(e) => {
-            println!("error when reading save file : {}", e);
+            log::error!("error when reading save file : {}", e);
             return Err(Box::new(e))
         },
     };
@@ -175,7 +202,7 @@ fn try_load_save() -> Result<PaymentDatas, Box<dyn std::error::Error>> {
     match serde_json::from_str(&contents) {
         Ok(data)  => Ok(data),
         Err(e) => {
-            println!("error when deserialising : {}", e);
+            log::error!("error when deserialising : {}", e);
             Err(Box::new(e))
         },
     }
@@ -196,6 +223,15 @@ async fn static_files(path: PathBuf) -> Result<NamedFile, NotFound<String>> {
         Ok(f) => Ok(f),
         Err(_) => get_index().await,
     }
+}
+
+fn get_date_entries_readonly(data: &PaymentDatas, month: u32, year: u32) -> Vec<&PaymentEntry>
+{
+    data.payments.iter().filter(|entry| {
+        let entry_date = DateTime::<Utc>::from_timestamp(entry.date, 0).unwrap().date_naive();
+        (month == 0 || entry_date.month() == month) &&
+        (year == 0 || entry_date.year_ce() == (true, year))
+    }).collect()
 }
 
 fn get_date_entries(data: &PaymentDatas, month: u32, year: u32) -> PaymentDatas
