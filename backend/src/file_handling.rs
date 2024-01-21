@@ -3,10 +3,12 @@ use std::{ops::Add, fs::File, io::{Write, Read}};
 use chrono::Local;
 use common::PaymentDatas;
 
-pub fn save_datas(payment_datas: &PaymentDatas, save_file_path: &str) {
+pub fn save_datas(payment_datas: &PaymentDatas, save_file_path: &str) -> Result<(), ()> {
     if try_save_datas(payment_datas, save_file_path).is_err() {
         save_emergency_datas(payment_datas);
+        return Err(());
     };
+    Ok(())
 }
 
 fn try_save_datas(payment_datas: &PaymentDatas, save_file_path: &str) -> Result<(), ()>
@@ -38,13 +40,30 @@ fn try_save_datas(payment_datas: &PaymentDatas, save_file_path: &str) -> Result<
 
 fn save_emergency_datas(payment_datas: &PaymentDatas) {
     let datetime_format: String = Local::now().format("%Y%m%y_%H%M").to_string().add(".log");
-    let mut file: File = File::create(datetime_format).unwrap();
-    let json: String = serde_json::to_string(&payment_datas).unwrap();
-    file.write_all(json.as_bytes()).unwrap();
-    // C'est mieux de mettre le programme dans un état qui permet de renvoyer a l'utilisateur que c'est la merde
-    // Genre faudrait définir un enum qui dit si on est dans un état normal de fonctionnement ou non
-    // Et si on est pas dans un état normal, faire un retour a l'utilisateur
-    panic!("Error when saving datas. Reach the maintainer of the program to fix the problem and get emergency saved datas");
+
+
+    // Try to create the file and return early if there's an error
+    let mut file = match File::create(datetime_format) {
+        Ok(file) => file,
+        Err(err) => {
+            log::error!("Failed to create file in emergency save: {} ", err);
+            return;
+        }
+    };
+
+    // Try to serialize payment_datas and return early if there's an error
+    let json = match serde_json::to_string(payment_datas) {
+        Ok(json) => json,
+        Err(err) => {
+            log::error!("Failed to serialize data in emergency save: {}", err);
+            return;
+        }
+    };
+
+    // Try to write to the file and log error if there's an issue
+    if let Err(err) = file.write_all(json.as_bytes()) {
+        log::error!("Failed to write to emergency save file: {}", err);
+    }
 }
 
 pub fn try_load_save(save_file_path: &str) -> Result<PaymentDatas, Box<dyn std::error::Error>> {
