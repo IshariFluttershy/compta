@@ -30,6 +30,7 @@ impl GoodType {
 
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct PaymentEntry {
+    pub id: u128,
     pub price: f64,
     pub payment_method: String,
     pub goods_type: String,

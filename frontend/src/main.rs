@@ -5,6 +5,8 @@ use reqwasm::http::*;
 use wasm_bindgen::JsCast;
 use web_sys::{console::log, EventTarget, HtmlInputElement, HtmlSelectElement};
 use yew::{platform::spawn_local, prelude::*};
+use serde;
+
 
 use crate::components::{entry_list::EntryList, total::Total};
 
@@ -19,7 +21,6 @@ pub struct Props {
 #[function_component]
 fn App() -> Html {
     let price: UseStateHandle<f64> = use_state(|| 0.);
-    let id_to_delete: UseStateHandle<usize> = use_state(|| 1);
     let month: UseStateHandle<u32> = use_state(|| 0);
     let year: UseStateHandle<u32> = use_state(|| 0);
     let goods_type_handle: UseStateHandle<String> = use_state(|| String::from(GoodType::Nourriture.as_str()));
@@ -43,7 +44,37 @@ fn App() -> Html {
                     *month_clone1, *year_clone1,
                 ))
             .send().await {
-                Ok(data) => match data.json::<PaymentDatas>().await {
+                Ok(data) => {
+                    if data.status() == 200 {
+                        let response_text = data.text().await.unwrap();
+                        log!("Response text: ", response_text.clone());
+                        
+                        match serde_json::from_str(&response_text) {
+                            Ok(data) => {
+                                log!("Get data success");
+                                payment_data_vec_clone.set(data);
+                                true
+                            }
+                            Err(err) => {
+                                log!("JSON parsing error: {}", err.to_string());
+                                log!("JSON parsing error: {:#?}", data.status());
+                                log!("JSON parsing error: {:#?}", data.status_text());
+
+                                false
+                            }
+                        }
+                    } else {
+                        // Handle non-successful status codes
+                        let error_message = data.text().await.unwrap_or_default();
+                        log!("Error from server: {}", error_message);
+                        false
+                    }
+                },
+                Err(err) => {
+                    log!("Network error: {}", err.to_string());
+                    false
+                }
+                /*Ok(data) => match data.json::<PaymentDatas>().await {
                     Ok(data) => {
                         log!("success2");
                         payment_data_vec_clone.set(data);
@@ -60,7 +91,7 @@ fn App() -> Html {
                 Err(err) => {
                     log!("error 4 : ", err.to_string());
                     false
-                }
+                }*/
             };
         });
     };
@@ -74,7 +105,7 @@ fn App() -> Html {
             .send().await {
                 Ok(data) => match data.json::<PaymentTotal>().await {
                     Ok(data) => {
-                        log!("success2");
+                        log!("Get total success");
                         payment_total_clone.set(data);
                         true
                     }
@@ -144,56 +175,43 @@ fn App() -> Html {
         }
     };
 
-    let on_delete_payment_click = {
-        let id_to_delete = id_to_delete.clone();
-        let get_data = get_data.clone();
-        let get_total = get_total.clone();
+    let get_data_delete = get_data.clone();
+    let get_total_delete = get_total.clone();
+    let on_delete_payment_click = Callback::from(move |id: u128| {
+        let get_data = get_data_delete.clone();
+        let get_total = get_total_delete.clone();
 
+        spawn_local(async move {
+            let resp = Request::post("/delete")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(wasm_bindgen::JsValue::from_str(&format!(
+                    "id={}",
+                    id
+                )))
+                .send()
+                .await
+                .unwrap();
 
-        move |_| {
-            let id_to_delete = id_to_delete.clone();
-            let get_data = get_data.clone();
-            let get_total = get_total.clone();
-
-
-            spawn_local(async move {
-                let resp = Request::post("/delete")
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .body(wasm_bindgen::JsValue::from_str(&format!(
-                        "id={}",
-                        *id_to_delete - 1
-                    )))
-                    .send()
-                    .await
-                    .unwrap();
-
-                get_data();
-                get_total();
-            });
-        }
-    };
+            get_data();
+            get_total();
+        });
+    });
 
     let on_price_input_change = {
+        let get_data = get_data.clone();
+        let get_total = get_total.clone();
         let price = price.clone();
 
         Callback::from(move |e: Event| {
+            let get_data = get_data.clone();
+            let get_total = get_total.clone();
             let target: Option<EventTarget> = e.target();
             let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
             if let Some(input) = input {
                 price.set(input.value().parse::<f64>().unwrap());
             }
-        })
-    };
-
-    let on_delete_input_change = {
-        let id_to_delete = id_to_delete.clone();
-
-        Callback::from(move |e: Event| {
-            let target: Option<EventTarget> = e.target();
-            let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
-            if let Some(input) = input {
-                id_to_delete.set(input.value().parse::<usize>().unwrap());
-            }
+            get_data();
+            get_total();
         })
     };
 
@@ -268,6 +286,13 @@ fn App() -> Html {
         })
     };
 
+    let on_update = Callback::from(move |_| {
+            let get_data = get_data.clone();
+            let get_total = get_total.clone();
+            get_data();
+            get_total();
+        });
+
     html! {
         <div>
             <p>
@@ -283,9 +308,6 @@ fn App() -> Html {
                 </select>
                 <input type="date" id="buy_date" name="buy_date" value={NaiveDateTime::from_timestamp_opt(*date_handle, 0).unwrap().date().to_string()} min="2023-01-01" max="2025-12-31" onchange={on_date_change}/>
                 <button onclick={on_add_payment_click}>{ "Valider" }</button>
-                {"________________________________________"}
-                <input type="number" id="IdToDelete" name="IdToDelete" placeholder="ID a supprimer" onchange={on_delete_input_change}/>
-                <button onclick={on_delete_payment_click}>{ "Supprime le paiement" }</button>
             </p>
             <p>
             <p>
@@ -296,9 +318,11 @@ fn App() -> Html {
                 {"Année, 0 pour ne pas filtrer : "}
                 <input type="number" id="Year" name="Year" placeholder="2023" min="2023" max="2030" onchange={on_year_input_change}/>
                 </p>
+                <button onclick={on_update}>{ "Actualiser" }</button>
+
             </p>
             <p>
-                <EntryList entries={payment_data_vec.payments.clone()} />
+                <EntryList entries={payment_data_vec.payments.clone()} delete_callback={on_delete_payment_click}/>
                 <Total total={(*payment_total).clone()} />
             </p>
         </div>

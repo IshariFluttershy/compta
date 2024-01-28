@@ -1,18 +1,20 @@
 mod file_handling;
 mod payment;
 
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
 use common::{PaymentEntry, PaymentDatas, PaymentTotal};
-use file_handling::{save_datas, try_load_save};
+use file_handling::{save_datas, try_load_data};
 use payment::{calculate_payment_total, get_date_entries_readonly, get_date_entries};
-use rocket::http::Status;
+use rocket::http::{ContentType, Header, Status};
 use rocket::{State, Request, response, Response};
 use rocket::form::Form;
-use rocket::tokio::sync::{Mutex, RwLock};
+use rocket::tokio::sync::RwLock;
 use rocket::{fs::NamedFile, response::status::NotFound};
 use rocket::serde::json::Json;
 use rocket::response::Responder;
+use uuid::Uuid;
 
 #[macro_use] extern crate rocket;
 
@@ -31,21 +33,7 @@ struct PaymentEntryRequest<'r> {
 
 #[derive(FromForm, Debug)]
 struct DeleteEntryRequest {
-    id: usize,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-enum ApplicationError {
-    Ok,
-    SaveDataError,
-    LoadDataError
-}
-
-impl<'r, 'o: 'r> Responder<'r, 'o> for ApplicationError {
-    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'o> {
-        // You can customize the response based on the error type
-        Response::build().status(Status::InternalServerError).ok()
-    }
+    id: u128,
 }
 
 macro_rules! check_state {
@@ -57,12 +45,31 @@ macro_rules! check_state {
     };
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum ApplicationError {
+    Ok,
+    SaveDataError,
+    LoadDataError
+}
+
+impl<'r, 'o: 'r> Responder<'r, 'o> for ApplicationError {
+    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'o> {
+        let body = format!("{:?}", self);
+        let body_length = body.len() as usize;
+
+        Response::build()
+            .status(Status::InternalServerError) // Set appropriate status based on error
+            .sized_body(body_length, Cursor::new(body))
+            .ok()
+    }
+}
+
 #[launch]
 fn rocket() -> _ {
-    // You must mount the static_files route
     env_logger::init();
+
     let mut functionnal_state = ApplicationError::Ok;
-    let data = match try_load_save(SAVE_FILE_PATH) {
+    let data = match try_load_data(SAVE_FILE_PATH) {
         Ok(loaded_data) => loaded_data,
         Err(e) => {
             log::error!("Error when loading save data : {}", e);
@@ -71,11 +78,11 @@ fn rocket() -> _ {
         }
     };
 
-    let data_pointer: Arc<Mutex<PaymentDatas>> = Arc::new(Mutex::new(data));
+    let data_pointer: Arc<RwLock<PaymentDatas>> = Arc::new(RwLock::new(data));
 
     rocket::build()
         .manage(data_pointer)
-        .manage(functionnal_state)
+        .manage(RwLock::new(functionnal_state))
         .mount("/", routes![index, static_files, command, delete, get_data, get_total])
 }
 
@@ -87,16 +94,23 @@ async fn index() -> Result<NamedFile, NotFound<String>> {
 
 #[post("/command", data = "<payment_entry>")]
 async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &State<PaymentDatasPointer>, functionnal_state: &State<ApplicationState>) -> Result<Json<PaymentDatas>, ApplicationError> {
+    println!("glgl1");
     check_state!(functionnal_state);
 
+    println!("glgl2");
     let entry = PaymentEntry {
+        id: Uuid::new_v4().as_u128(),
         price: payment_entry.price,
         goods_type: payment_entry.goods_type.to_string(),
         payment_method: payment_entry.payment_method.to_string(),
         date: payment_entry.date,
     };
+    println!("glgl3");
+
     let mut payment_datas = payment_datas.write().await;
     payment_datas.payments.push(entry);
+
+    println!("glgl4");
 
     if save_datas(&payment_datas, SAVE_FILE_PATH).is_err() {
         *functionnal_state.write().await = ApplicationError::SaveDataError;
@@ -108,7 +122,10 @@ async fn command(payment_entry: Form<PaymentEntryRequest<'_>>, payment_datas: &S
 async fn delete(delete_entry: Form<DeleteEntryRequest>, payment_datas: &State<PaymentDatasPointer>, functionnal_state: &State<ApplicationState>) -> Result<(), ApplicationError> {
     check_state!(functionnal_state);
     let mut payment_datas = payment_datas.write().await;
-    payment_datas.payments.remove(delete_entry.id);
+    if let Some(to_remove) = payment_datas.payments.iter().position(|entry| entry.id == delete_entry.id)
+    {
+        payment_datas.payments.remove(to_remove);
+    }
 
     if save_datas(&payment_datas, SAVE_FILE_PATH).is_err() {
         *functionnal_state.write().await = ApplicationError::SaveDataError;

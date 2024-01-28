@@ -66,7 +66,7 @@ fn save_emergency_datas(payment_datas: &PaymentDatas) {
     }
 }
 
-pub fn try_load_save(save_file_path: &str) -> Result<PaymentDatas, Box<dyn std::error::Error>> {
+pub fn try_load_data(save_file_path: &str) -> Result<PaymentDatas, Box<dyn std::error::Error>> {
     let mut contents = String::new();
 
     let mut file = match File::open(save_file_path) {
